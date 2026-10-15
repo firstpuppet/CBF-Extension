@@ -1,6 +1,6 @@
 # Installation
 
-Install [Geode](https://geode-sdk.org/install/), then install this mod from the Geode index.
+N/A
 
 # What does it do
 
@@ -8,7 +8,7 @@ This mod allows your inputs to register in between visual frames, which drastica
 
 This fork only supports Windows (on Linux, play through Wine/Proton).
 
-If you like the mod, please consider [donating](https://www.paypal.com/donate/?hosted_button_id=U2LWN9H395TF8)!
+If you like the mod, please consider [donating](https://www.paypal.com/donate/?hosted_button_id=U2LWN9H395TF8) to the original developer of CBF, as linked before. I am only a hobbyist and do not want payment for my custom work.
 
 # Why not just use Click Between Steps?
 
@@ -39,8 +39,3 @@ See [BUILDING.md](BUILDING.md) for how to compile the mod on Linux (cross-compil
 # Credits
 
 Icon by alex/sincos.
-
-Android, macOS, & iOS code based off [Click on Steps by zmx](https://github.com/qimiko/click-on-steps), used with permission. \
-Android port by [mat](https://github.com/matcool), macOS & iOS ports by [Jasmine](https://github.com/hiimjasmine00).
-
-(these credits are slightly outdated since the mod just uses the vanilla game's input handling now but oh well)
