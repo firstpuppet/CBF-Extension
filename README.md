@@ -26,6 +26,10 @@ This mod automatically overrides the vanilla "Click On Steps" and "Click Between
 
 The mod comes with its own version of Physics Bypass in the mod options (on Windows/Linux), which automatically uses 2.1 physics on levels made before 2.2. Be warned that not all lists or leaderboards that allow CBF will consider this legit!
 
+# Building
+
+See [BUILDING.md](BUILDING.md) for how to compile the mod on Linux (for Windows or Android).
+
 # Known issues
 
 - This mod does not work with bots
