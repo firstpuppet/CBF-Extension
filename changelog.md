@@ -6,6 +6,7 @@
 * Groups toggled by an input (toggle orbs, touch triggers) can now be collided with at the time of the input
 * Physics Bypass now automatically uses 2.1 physics on pre-2.2 levels and 2.2 physics on 2.2 levels (removed the "Physics Bypass Mode" option)
 * Removed the Wine workaround and the Linux input program (no longer necessary)
+* Dropped Android, macOS & iOS support to simplify the codebase (Windows only; Linux via Wine/Proton)
 
 # v1.5.0
 

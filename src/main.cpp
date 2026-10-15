@@ -48,15 +48,6 @@ void buildStepQueue(int stepCount) {
 	nextInput = EMPTY_INPUT;
 	stepQueue = {}; // shouldnt be necessary, but just in case
 
-	// workaround for a bug in geode 5.3.0 that affects android
-	#ifdef GEODE_IS_ANDROID
-	static double androidFactor = []() {
-		VersionInfo ver = geode::Loader::get()->getVersion();
-		if (ver.getMajor() == 5 && ver.getMinor() <= 3) return 1000.0;
-		else return 1.0;
-	}();
-	#endif
-
 	skipUpdate = false;
 	if (firstFrame) {
 		skipUpdate = true;
@@ -77,7 +68,6 @@ void buildStepQueue(int stepCount) {
 		double elapsedTime = 0.0;
 		while (inputIdx < inputVector.size()) { // while loop to account for multiple inputs on the same step
 			PlayerButtonCommand input = inputVector[inputIdx];
-			GEODE_ANDROID(input.m_timestamp /= androidFactor;)
 
 			if (input.m_timestamp - lastFrameTime < stepDelta * (i + 1)) { // if the next input in the vector happened on the current step, or if its the last step
 				double inputTime = fmod((input.m_timestamp - lastFrameTime), stepDelta) / stepDelta; // proportion of step elapsed at the time the input was made
@@ -221,9 +211,7 @@ void onFrameStart() {
 	if (!precisionFix) currentFrameTime = getCurrentTimestamp();
 
 	if (softToggle // CBF disabled
-	#ifdef GEODE_IS_WINDOWS
 		|| !GetFocus() // GD is minimized
-	#endif
 		|| !playLayer // not in level
 		|| !(par = playLayer->getParent()) // must be a real playLayer with a parent (for compatibility with mods that use a fake playLayer)
 		|| (par->getChildByType<PauseLayer>(0)) // if paused
@@ -233,8 +221,7 @@ void onFrameStart() {
 		skipUpdate = true;
 		inputVector.clear();
 	}
-	
-	#ifdef GEODE_IS_WINDOWS
+
 	if (mouseFix && !skipUpdate) { // reduce lag with high polling rate mice by limiting the number of mouse movements per frame to 1
 		MSG msg;
 		int index = 1;
@@ -245,10 +232,8 @@ void onFrameStart() {
 			else index++;
 		}
 	}
-	#endif
 }
 
-#ifdef GEODE_IS_WINDOWS
 #include <Geode/modify/CCEGLView.hpp>
 class $modify(CCEGLView) {
 	void pollEvents() {
@@ -256,20 +241,15 @@ class $modify(CCEGLView) {
 		CCEGLView::pollEvents();
 	}
 };
-#endif
 
 #include <Geode/modify/CCScheduler.hpp>
 class $modify(CCScheduler) {
 	void update(float dt) {
-		#ifndef GEODE_IS_WINDOWS
-		onFrameStart();
-		#else
 		if (precisionFix) {
 			static LARGE_INTEGER* cur = reinterpret_cast<LARGE_INTEGER*>(geode::base::getCocos() + 0x1a84d8);
 			currentFrameTime = (double)cur->QuadPart / (double)freq.QuadPart;
 		}
-		#endif
-		
+
 		CCScheduler::update(dt);
 	}
 };
@@ -331,18 +311,6 @@ class $modify(GJBaseGameLayer) {
 		if (midStep) groupToggled = true;
 		GJBaseGameLayer::toggleGroupTriggered(group, activate, remapKeys, triggerID, controlID);
 	}
-
-#ifdef GEODE_IS_MACOS
-	// getModifiedDelta is inlined, hook update directly instead
-	void update(float delta) {
-		if (this->m_started) {
-			float timewarp = std::max(this->m_gameState.m_timeWarp, 1.0f) / 240.0f;
-			calculateSteps(roundf((this->m_extraDelta + (m_resumeTimer <= 0 ? delta : 0.0)) / timewarp) * timewarp);
-		}
-
-		GJBaseGameLayer::update(delta);
-	}
-#endif
 };
 
 CCPoint p1Pos = { 0.f, 0.f };
@@ -540,7 +508,6 @@ class $modify(PlayerObject) {
 		}
 	}
 
-	#ifdef GEODE_IS_WINDOWS
 	void updateShipRotation(float t) {
 		PlayLayer* pl = PlayLayer::get();
 
@@ -551,7 +518,6 @@ class $modify(PlayerObject) {
 		}
 		else PlayerObject::updateShipRotation(t);
 	}
-	#endif
 };
 
 /*
@@ -613,7 +579,6 @@ void writeAddr(geode::ByteVector& vec, size_t offset, const void* addr) {
 }
 
 void togglePrecisionFix(bool enable) {
-#ifdef GEODE_IS_WINDOWS
 	static Patch* pfPatch = nullptr;
 	static Patch* pfPatch2 = nullptr;
 
@@ -695,11 +660,9 @@ void togglePrecisionFix(bool enable) {
 	}
 
 	precisionFix = enable;
-#endif
 }
 
 void togglePhysicsBypass(bool enable) {
-#ifdef GEODE_IS_WINDOWS
 	void* addr = reinterpret_cast<void*>(geode::base::get() + 0x237a91);
 
 	static Patch* pbPatch = nullptr;
@@ -720,11 +683,9 @@ void togglePhysicsBypass(bool enable) {
 	}
 
 	physicsBypass = enable;
-#endif
 }
 
 void toggleMod(bool disable) {
-#if defined(GEODE_IS_WINDOWS)
 	void* addr = reinterpret_cast<void*>(geode::base::get() + 0x622bd0);
 
 	static Patch* modPatch = nullptr;
@@ -735,7 +696,6 @@ void toggleMod(bool disable) {
 	} else {
 		(void) modPatch->enable();
 	}
-#endif
 
 	softToggle = disable;
 
@@ -779,7 +739,6 @@ $on_mod(Loaded) {
 		mouseFix = enable;
 	});
 
-#ifdef GEODE_IS_WINDOWS
 	(void) Mod::get()->hook(
 		reinterpret_cast<void*>(geode::base::get() + 0x71ef0),
 		Slerp2D,
@@ -788,5 +747,4 @@ $on_mod(Loaded) {
 	);
 
 	windowsSetup();
-#endif
 }
