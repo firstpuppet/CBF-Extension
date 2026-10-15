@@ -30,7 +30,7 @@ struct SplitPlayer {
 	bool split = false; // false -> update the player normally at the end of the step
 	bool startedOnGround = false;
 	bool buffering = false; // airborne in a gamemode where clicks get buffered until landing (cube, ball, robot, spider)
-	bool checkHazards = false; // check hazards at the time of the input instead of only at the end of the step
+	bool checkHazards = false; // check hazards at the time of the input instead of only at the end of the step (spiders/teleport orbs)
 };
 
 bool touchingTeleportOrb(PlayerObject* p) {
@@ -184,6 +184,7 @@ class $modify(PlayerObject) {
 
 				if (firstLoop && ((p->m_yVelocity < 0) ^ p->m_isUpsideDown)) p->m_isOnGround = sp.startedOnGround; // this fixes delayed inputs on platforms moving down for some reason
 				substepCollision(pl, p, stepDelta, !sp.checkHazards);
+				if (!sp.checkHazards) sp.checkHazards = touchingTeleportOrb(p); // also covers orbs entered partway through the step
 
 				// a click made after landing mid-step would jump instantly, but outside of CBF it's buffered until the next step,
 				// so dont let buffering players land until the end of the step (to match vanilla buffer clicks)
@@ -244,10 +245,11 @@ float Slerp2D(float p0, float p1, float p2) {
 }
 
 void installShipRotationHook() {
-	(void) Mod::get()->hook(
+	auto res = Mod::get()->hook(
 		reinterpret_cast<void*>(geode::base::get() + offsets::SLERP_2D),
 		Slerp2D,
 		"Slerp2D",
 		tulip::hook::TulipConvention::Default
 	);
+	if (res.isErr()) log::error("Failed to hook Slerp2D, ship rotation won't be corrected on split steps or with physics bypass: {}", res.unwrapErr());
 }

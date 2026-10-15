@@ -124,6 +124,21 @@ TEST(input_in_last_step) {
 	CHECK_NEAR(plan.steps[4].deltaFactor, 0.4);
 }
 
+TEST(input_before_frame_counts_as_frame_start) {
+	auto plan = plan4({ -0.10 }); // e.g. a timestamp slightly older than the frame
+	CHECK(plan.inputsUsed == 1);
+	CHECK(plan.steps[0].input == 0);
+	CHECK(plan.steps[0].deltaFactor == SMALLEST_FLOAT);
+	CHECK_NEAR(plan.steps[1].deltaFactor, 1.0); // the step isn't stretched past its length
+}
+
+TEST(inputs_before_frame_keep_later_inputs_correct) {
+	auto plan = plan4({ -0.10, 0.10 });
+	CHECK(plan.steps[1].input == 1);
+	CHECK_NEAR(plan.steps[1].deltaFactor, 0.4); // 40% into step 0, measured from the step start
+	CHECK_NEAR(plan.steps[2].deltaFactor, 0.6);
+}
+
 TEST(zero_steps_gives_empty_plan) {
 	std::vector<double> timestamps = { 0.5 };
 	auto plan = planSteps(timestamps, 0.0, 1.0, 0);

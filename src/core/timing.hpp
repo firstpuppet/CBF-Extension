@@ -55,8 +55,10 @@ inline StepPlan planSteps(std::span<const double> timestamps, double lastFrameTi
 			const double sinceFrameStart = timestamps[plan.inputsUsed] - lastFrameTime;
 			if (sinceFrameStart >= stepDelta * (i + 1)) break; // input belongs to a later step (or the next frame)
 
-			// proportion of the step elapsed when the input happened
-			const double inputTime = std::fmod(sinceFrameStart, stepDelta) / stepDelta;
+			// proportion of the step elapsed when the input happened.
+			// an input from before the frame started counts as happening at the start of the step
+			// (otherwise the fraction goes negative and the step gets simulated for longer than a step)
+			const double inputTime = std::max(0.0, std::fmod(sinceFrameStart, stepDelta) / stepDelta);
 			plan.steps.push_back({ static_cast<int>(plan.inputsUsed), std::clamp(inputTime - elapsed, SMALLEST_FLOAT, 1.0) });
 			elapsed = inputTime;
 			plan.inputsUsed++;

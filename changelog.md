@@ -7,6 +7,10 @@
 * Physics Bypass now automatically uses 2.1 physics on pre-2.2 levels and 2.2 physics on 2.2 levels (removed the "Physics Bypass Mode" option)
 * Removed the Wine workaround and the Linux input program (no longer necessary)
 * Dropped Android, macOS & iOS support to simplify the codebase (Windows only; Linux via Wine/Proton)
+* Spider/teleport orbs entered partway through a step now also get hazards checked at the time of the input
+* Fixed inputs timestamped slightly before a frame making that physics step run longer than it should
+* A patch that fails to apply (precision fix, physics bypass, etc.) now disables that feature and logs an error instead of crashing
+* Reorganised the source code into smaller files and added unit tests for the timing code
 
 # v1.5.0
 

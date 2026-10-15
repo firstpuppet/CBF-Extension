@@ -87,7 +87,9 @@ class $modify(GJBaseGameLayer) {
 		GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
 	}
 
-	// track group toggles caused by inputs so objects they enable (portals, pads, etc.) can be collided with at the time of the input
+	// track group toggles caused by inputs so objects they enable (portals, pads, etc.) can be collided with at the time of the input.
+	// spawn triggers don't need their own hook: if a spawned toggle runs immediately it goes through toggleGroup(),
+	// and delayed ones run on a later step anyway
 	void toggleGroup(int id, bool activate) {
 		if (midStep) groupToggled = true;
 		GJBaseGameLayer::toggleGroup(id, activate);
