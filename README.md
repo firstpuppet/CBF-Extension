@@ -26,12 +26,9 @@ This mod automatically overrides the vanilla "Click On Steps" and "Click Between
 
 The mod comes with its own version of Physics Bypass in the mod options (on Windows/Linux). Be warned that not all lists or leaderboards that allow CBF will consider this legit!
 
-If on Linux, and the mod doesn't work, please try running the command <cr>sudo usermod -aG input $USER</c> (this will make your system slightly less secure).
-
 # Known issues
 
 - This mod does not work with bots
-- Linux controller support is experimental
 
 # Credits
 

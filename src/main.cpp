@@ -29,7 +29,6 @@ std::vector<struct PlayerButtonCommand> inputVector;
 std::deque<struct Step> stepQueue;
 
 bool softToggle;
-bool enableRightClick;
 
 PlayerButtonCommand nextInput = EMPTY_INPUT;
 
@@ -38,10 +37,6 @@ TimestampType currentFrameTime;
 
 bool firstFrame = true; // necessary to prevent accidental inputs at the start of the level or when unpausing
 bool skipUpdate = true; // true -> dont split steps during PlayerObject::update()
-bool linuxNative = false;
-
-std::array<std::unordered_set<size_t>, 6> inputBinds;
-std::unordered_set<uint16_t> heldInputs;
 
 /*
 this function copies over the input data and uses it to build a queue of physics steps
@@ -53,10 +48,6 @@ void buildStepQueue(int stepCount) {
 	nextInput = EMPTY_INPUT;
 	stepQueue = {}; // shouldnt be necessary, but just in case
 
-	#ifdef GEODE_IS_WINDOWS
-	if (linuxNative) linuxCheckInputs();
-	#endif
-	
 	// workaround for a bug in geode 5.3.0 that affects android
 	#ifdef GEODE_IS_ANDROID
 	static double androidFactor = []() {
@@ -75,7 +66,7 @@ void buildStepQueue(int stepCount) {
 		return;
 	}
 
-	if (!linuxNative) inputVector.insert(inputVector.end(), playLayer->m_queuedButtons.begin(), playLayer->m_queuedButtons.end());
+	inputVector.insert(inputVector.end(), playLayer->m_queuedButtons.begin(), playLayer->m_queuedButtons.end());
 	playLayer->m_queuedButtons.clear();
 
 	TimestampType deltaTime = currentFrameTime - lastFrameTime;
@@ -126,53 +117,6 @@ Step popStepQueue() {
 	return front;
 }
 
-#ifdef GEODE_IS_WINDOWS
-/*
-prepare list of keybinds for linux
-*/
-void updateKeybinds() {
-	std::array<std::unordered_set<size_t>, 6> binds;
-	std::vector<geode::Keybind> v;
-	Mod* customKeybinds = Loader::get()->getLoadedMod("geode.custom-keybinds");
-	if (!customKeybinds) {
-		static bool checked = 0;
-		if (!checked) log::info("Custom keybinds not loaded.");
-		checked = 1;
-
-		inputBinds[p1Jump] = { KEY_Space, KEY_W, CONTROLLER_A, CONTROLLER_Up, CONTROLLER_RB };
-		inputBinds[p1Left] = { KEY_A, CONTROLLER_Left, CONTROLLER_LTHUMBSTICK_LEFT };
-		inputBinds[p1Right] = { KEY_D, CONTROLLER_Right, CONTROLLER_LTHUMBSTICK_RIGHT };
-
-		inputBinds[p2Jump] = { KEY_Up, CONTROLLER_LB };
-		inputBinds[p2Left] = { KEY_Left, CONTROLLER_RTHUMBSTICK_LEFT };
-		inputBinds[p2Right] = { KEY_Right, CONTROLLER_RTHUMBSTICK_RIGHT };
-		return;
-	}
-
-	enableRightClick = Mod::get()->getSettingValue<bool>("right-click");
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("jump-p1");
-	for (int i = 0; i < v.size(); i++) binds[p1Jump].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("move-left-p1");
-	for (int i = 0; i < v.size(); i++) binds[p1Left].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("move-right-p1");
-	for (int i = 0; i < v.size(); i++) binds[p1Right].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("jump-p2");
-	for (int i = 0; i < v.size(); i++) binds[p2Jump].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("move-left-p2");
-	for (int i = 0; i < v.size(); i++) binds[p2Left].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("move-right-p2");
-	for (int i = 0; i < v.size(); i++) binds[p2Right].emplace(v[i].key);
-
-	inputBinds = binds;
-}
-#endif
-
 /*
 rewritten PlayerObject::resetCollisionLog() since it's inlined in GD 2.2074 on Windows
 */
@@ -190,7 +134,18 @@ void decomp_resetCollisionLog(PlayerObject* p) {
 double averageDelta = 0.0;
 
 bool physicsBypass;
-bool legacyBypass;
+bool legacyBypass; // true -> current level uses 2.1 physics, picked automatically in PlayLayer::init()
+
+/*
+levels uploaded before 2.2 were built around 2.1 physics, so physics bypass emulates 2.1 on those
+- m_timestamp is only recorded when a level is verified in 2.2, so if it's set the level is definitely a 2.2 level
+- m_gameVersion is the version the level was last uploaded with (21 = 2.1), 0 for local/unknown levels which are treated as 2.2
+*/
+bool levelUsesLegacyPhysics(GJGameLevel* level) {
+	if (!level) return false;
+	if (level->m_timestamp > 0) return false;
+	return level->m_gameVersion > 0 && level->m_gameVersion < 22;
+}
 
 /*
 determine the number of physics steps that happen on each frame,
@@ -227,9 +182,9 @@ bool safeMode;
 
 class $modify(PlayLayer) {
 	bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-		#ifdef GEODE_IS_WINDOWS
-		if (linuxNative) updateKeybinds(); // update keybinds when you enter a level (for linux)
-		#endif
+		legacyBypass = levelUsesLegacyPhysics(level);
+		if (physicsBypass) log::info("Physics bypass using {} physics (game version {})", legacyBypass ? "2.1" : "2.2", level ? level->m_gameVersion : 0);
+
 		bool result = PlayLayer::init(level, useReplay, dontCreateObjects);
 		if (!softToggle) {
 			this->m_clickBetweenSteps = false;
@@ -261,7 +216,7 @@ void onFrameStart() {
 	PlayLayer* playLayer = PlayLayer::get();
 	CCNode* par;
 
-	if (!precisionFix || linuxNative) currentFrameTime = getCurrentTimestamp();
+	if (!precisionFix) currentFrameTime = getCurrentTimestamp();
 
 	if (softToggle // CBF disabled
 	#ifdef GEODE_IS_WINDOWS
@@ -278,7 +233,6 @@ void onFrameStart() {
 	}
 	
 	#ifdef GEODE_IS_WINDOWS
-	if (linuxNative) linuxHeartbeat();
 	if (mouseFix && !skipUpdate) { // reduce lag with high polling rate mice by limiting the number of mouse movements per frame to 1
 		MSG msg;
 		int index = 1;
@@ -308,7 +262,7 @@ class $modify(CCScheduler) {
 		#ifndef GEODE_IS_WINDOWS
 		onFrameStart();
 		#else
-		if (precisionFix && !linuxNative) {
+		if (precisionFix) {
 			static LARGE_INTEGER* cur = reinterpret_cast<LARGE_INTEGER*>(geode::base::getCocos() + 0x1a84d8);
 			currentFrameTime = (double)cur->QuadPart / (double)freq.QuadPart;
 		}
@@ -705,8 +659,6 @@ void toggleMod(bool disable) {
 }
 
 $on_mod(Loaded) {
-	Mod::get()->setSavedValue<bool>("is-linux", false);
-
 	toggleMod(Mod::get()->getSettingValue<bool>("soft-toggle"));
 	listenForSettingChanges<bool>("soft-toggle", toggleMod);
 
@@ -715,11 +667,6 @@ $on_mod(Loaded) {
 
 	togglePhysicsBypass(Mod::get()->getSettingValue<bool>("physics-bypass"));
 	listenForSettingChanges<bool>("physics-bypass", togglePhysicsBypass);
-
-	legacyBypass = Mod::get()->getSettingValue<std::string>("bypass-mode") == "2.1";
-	listenForSettingChanges<std::string>("bypass-mode", +[](std::string mode) {
-		legacyBypass = mode == "2.1";
-	});
 
 	safeMode = Mod::get()->getSettingValue<bool>("safe-mode");
 	listenForSettingChanges<bool>("safe-mode", +[](bool enable) {
