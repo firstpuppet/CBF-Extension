@@ -7,6 +7,19 @@ on:
       - "**"
 
 jobs:
+  tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & run tests
+        run: |
+          cmake -S tests -B build-tests
+          cmake --build build-tests
+          ctest --test-dir build-tests --output-on-failure
+
   build:
     name: Windows
     runs-on: windows-latest

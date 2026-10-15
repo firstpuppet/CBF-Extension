@@ -75,6 +75,18 @@ If your Clang isn't the default `clang` on your `PATH` (e.g. it's installed as `
 
 Configuring without a Windows toolchain fails on purpose with `This mod only supports Windows`.
 
+## Running the unit tests
+
+The timing maths in `src/core/timing.hpp` (step splitting, step counts, 2.1/2.2 detection) doesn't depend on Geode or Windows. It has unit tests you can run natively on Linux with any C++20 compiler:
+
+```sh
+cmake -S tests -B build-tests
+cmake --build build-tests
+ctest --test-dir build-tests --output-on-failure
+```
+
+Run them after changing anything in `src/core/`. CI runs them on every push.
+
 ## Troubleshooting
 
 - **`setup_geode_mod called, but Geode CLI was not found`**: the `geode` binary isn't on your `PATH`. Packaging the `.geode` file needs the CLI. Adding `-DGEODE_DISABLE_CLI_CALLS=ON` to the CMake command skips packaging, which is useful for a compile-only check.
