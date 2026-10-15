@@ -29,7 +29,6 @@ std::vector<struct PlayerButtonCommand> inputVector;
 std::deque<struct Step> stepQueue;
 
 bool softToggle;
-bool enableRightClick;
 
 PlayerButtonCommand nextInput = EMPTY_INPUT;
 
@@ -38,10 +37,6 @@ TimestampType currentFrameTime;
 
 bool firstFrame = true; // necessary to prevent accidental inputs at the start of the level or when unpausing
 bool skipUpdate = true; // true -> dont split steps during PlayerObject::update()
-bool linuxNative = false;
-
-std::array<std::unordered_set<size_t>, 6> inputBinds;
-std::unordered_set<uint16_t> heldInputs;
 
 /*
 this function copies over the input data and uses it to build a queue of physics steps
@@ -53,10 +48,6 @@ void buildStepQueue(int stepCount) {
 	nextInput = EMPTY_INPUT;
 	stepQueue = {}; // shouldnt be necessary, but just in case
 
-	#ifdef GEODE_IS_WINDOWS
-	if (linuxNative) linuxCheckInputs();
-	#endif
-	
 	// workaround for a bug in geode 5.3.0 that affects android
 	#ifdef GEODE_IS_ANDROID
 	static double androidFactor = []() {
@@ -75,7 +66,7 @@ void buildStepQueue(int stepCount) {
 		return;
 	}
 
-	if (!linuxNative) inputVector.insert(inputVector.end(), playLayer->m_queuedButtons.begin(), playLayer->m_queuedButtons.end());
+	inputVector.insert(inputVector.end(), playLayer->m_queuedButtons.begin(), playLayer->m_queuedButtons.end());
 	playLayer->m_queuedButtons.clear();
 
 	TimestampType deltaTime = currentFrameTime - lastFrameTime;
@@ -108,16 +99,18 @@ void buildStepQueue(int stepCount) {
 /*
 return the first step in the queue,
 also check if an input happened on the previous step, if so run handleButton.
+inputApplied is set to true if handleButton was run.
 */
-Step popStepQueue() {
+Step popStepQueue(bool* inputApplied = nullptr) {
+	if (inputApplied) *inputApplied = false;
 	if (stepQueue.empty()) return EMPTY_STEP;
 
 	Step front = stepQueue.front();
-	double deltaFactor = front.deltaFactor;
 
 	if (nextInput.m_timestamp != 0) {
 		PlayLayer* playLayer = PlayLayer::get();
 		playLayer->handleButton(nextInput.m_isPush, (int)nextInput.m_button, !nextInput.m_isPlayer2);
+		if (inputApplied) *inputApplied = true;
 	}
 
 	nextInput = front.input;
@@ -125,53 +118,6 @@ Step popStepQueue() {
 
 	return front;
 }
-
-#ifdef GEODE_IS_WINDOWS
-/*
-prepare list of keybinds for linux
-*/
-void updateKeybinds() {
-	std::array<std::unordered_set<size_t>, 6> binds;
-	std::vector<geode::Keybind> v;
-	Mod* customKeybinds = Loader::get()->getLoadedMod("geode.custom-keybinds");
-	if (!customKeybinds) {
-		static bool checked = 0;
-		if (!checked) log::info("Custom keybinds not loaded.");
-		checked = 1;
-
-		inputBinds[p1Jump] = { KEY_Space, KEY_W, CONTROLLER_A, CONTROLLER_Up, CONTROLLER_RB };
-		inputBinds[p1Left] = { KEY_A, CONTROLLER_Left, CONTROLLER_LTHUMBSTICK_LEFT };
-		inputBinds[p1Right] = { KEY_D, CONTROLLER_Right, CONTROLLER_LTHUMBSTICK_RIGHT };
-
-		inputBinds[p2Jump] = { KEY_Up, CONTROLLER_LB };
-		inputBinds[p2Left] = { KEY_Left, CONTROLLER_RTHUMBSTICK_LEFT };
-		inputBinds[p2Right] = { KEY_Right, CONTROLLER_RTHUMBSTICK_RIGHT };
-		return;
-	}
-
-	enableRightClick = Mod::get()->getSettingValue<bool>("right-click");
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("jump-p1");
-	for (int i = 0; i < v.size(); i++) binds[p1Jump].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("move-left-p1");
-	for (int i = 0; i < v.size(); i++) binds[p1Left].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("move-right-p1");
-	for (int i = 0; i < v.size(); i++) binds[p1Right].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("jump-p2");
-	for (int i = 0; i < v.size(); i++) binds[p2Jump].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("move-left-p2");
-	for (int i = 0; i < v.size(); i++) binds[p2Left].emplace(v[i].key);
-
-	v = customKeybinds->getSettingValue<std::vector<geode::Keybind>>("move-right-p2");
-	for (int i = 0; i < v.size(); i++) binds[p2Right].emplace(v[i].key);
-
-	inputBinds = binds;
-}
-#endif
 
 /*
 rewritten PlayerObject::resetCollisionLog() since it's inlined in GD 2.2074 on Windows
@@ -190,7 +136,18 @@ void decomp_resetCollisionLog(PlayerObject* p) {
 double averageDelta = 0.0;
 
 bool physicsBypass;
-bool legacyBypass;
+bool legacyBypass; // true -> current level uses 2.1 physics, picked automatically in PlayLayer::init()
+
+/*
+levels uploaded before 2.2 were built around 2.1 physics, so physics bypass emulates 2.1 on those
+- m_timestamp is only recorded when a level is verified in 2.2, so if it's set the level is definitely a 2.2 level
+- m_gameVersion is the version the level was last uploaded with (21 = 2.1), 0 for local/unknown levels which are treated as 2.2
+*/
+bool levelUsesLegacyPhysics(GJGameLevel* level) {
+	if (!level) return false;
+	if (level->m_timestamp > 0) return false;
+	return level->m_gameVersion > 0 && level->m_gameVersion < 22;
+}
 
 /*
 determine the number of physics steps that happen on each frame,
@@ -227,9 +184,9 @@ bool safeMode;
 
 class $modify(PlayLayer) {
 	bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
-		#ifdef GEODE_IS_WINDOWS
-		if (linuxNative) updateKeybinds(); // update keybinds when you enter a level (for linux)
-		#endif
+		legacyBypass = levelUsesLegacyPhysics(level);
+		if (physicsBypass) log::info("Physics bypass using {} physics (game version {})", legacyBypass ? "2.1" : "2.2", level ? level->m_gameVersion : 0);
+
 		bool result = PlayLayer::init(level, useReplay, dontCreateObjects);
 		if (!softToggle) {
 			this->m_clickBetweenSteps = false;
@@ -261,7 +218,7 @@ void onFrameStart() {
 	PlayLayer* playLayer = PlayLayer::get();
 	CCNode* par;
 
-	if (!precisionFix || linuxNative) currentFrameTime = getCurrentTimestamp();
+	if (!precisionFix) currentFrameTime = getCurrentTimestamp();
 
 	if (softToggle // CBF disabled
 	#ifdef GEODE_IS_WINDOWS
@@ -278,7 +235,6 @@ void onFrameStart() {
 	}
 	
 	#ifdef GEODE_IS_WINDOWS
-	if (linuxNative) linuxHeartbeat();
 	if (mouseFix && !skipUpdate) { // reduce lag with high polling rate mice by limiting the number of mouse movements per frame to 1
 		MSG msg;
 		int index = 1;
@@ -308,7 +264,7 @@ class $modify(CCScheduler) {
 		#ifndef GEODE_IS_WINDOWS
 		onFrameStart();
 		#else
-		if (precisionFix && !linuxNative) {
+		if (precisionFix) {
 			static LARGE_INTEGER* cur = reinterpret_cast<LARGE_INTEGER*>(geode::base::getCocos() + 0x1a84d8);
 			currentFrameTime = (double)cur->QuadPart / (double)freq.QuadPart;
 		}
@@ -320,6 +276,8 @@ class $modify(CCScheduler) {
 
 int stepCount;
 bool clickOnSteps = false;
+bool midStep = false; // true -> currently splitting a step in PlayerObject::update()
+bool groupToggled = false; // set if a group was toggled mid-step (toggle orbs, touch triggers, etc.)
 
 class $modify(GJBaseGameLayer) {
 	static void onModify(auto& self) {
@@ -363,6 +321,17 @@ class $modify(GJBaseGameLayer) {
 		return calculateSteps(GJBaseGameLayer::getModifiedDelta(delta));
 	}
 
+	// track group toggles caused by inputs so objects they enable (portals, pads, etc.) can be collided with at the time of the input
+	void toggleGroup(int id, bool activate) {
+		if (midStep) groupToggled = true;
+		GJBaseGameLayer::toggleGroup(id, activate);
+	}
+
+	void toggleGroupTriggered(int group, bool activate, gd::vector<int> const& remapKeys, int triggerID, int controlID) {
+		if (midStep) groupToggled = true;
+		GJBaseGameLayer::toggleGroupTriggered(group, activate, remapKeys, triggerID, controlID);
+	}
+
 #ifdef GEODE_IS_MACOS
 	// getModifiedDelta is inlined, hook update directly instead
 	void update(float delta) {
@@ -384,7 +353,42 @@ float shipRotDelta = 0.0f;
 bool inputThisStep = false;
 bool p1Split = false;
 bool p2Split = false;
-bool midStep = false;
+
+struct SplitPlayer {
+	PlayerObject* player = nullptr;
+	bool split = false; // false -> update the player normally at the end of the step
+	bool startedOnGround = false;
+	bool buffering = false; // airborne in a gamemode where clicks get buffered until landing (cube, ball, robot, spider)
+	bool checkHazards = false; // check hazards at the time of the input instead of only at the end of the step
+};
+
+bool touchingTeleportOrb(PlayerObject* p) {
+	for (GameObject* ring : CCArrayExt<GameObject*>(p->m_touchingRings)) {
+		if (ring->m_objectType == GameObjectType::SpiderOrb || ring->m_objectType == GameObjectType::TeleportOrb) return true;
+	}
+	return false;
+}
+
+SplitPlayer prepareSplit(PlayerObject* p, bool split) {
+	SplitPlayer sp;
+	sp.player = p;
+	sp.split = split;
+	sp.startedOnGround = p->m_isOnGround;
+	sp.buffering = !(p->m_isOnGround
+		|| p->m_touchingRings->count()
+		|| p->m_isDashing
+		|| (p->m_isDart || p->m_isBird || p->m_isShip || p->m_isSwing));
+
+	// spider teleports are instant, so unless hazards are checked at the time of the input,
+	// whether you survive only depends on which step the teleport happened on
+	sp.checkHazards = p->m_isSpider || touchingTeleportOrb(p);
+	return sp;
+}
+
+void substepCollision(PlayLayer* pl, PlayerObject* p, float stepDelta, bool ignoreDamage) {
+	if (!p->m_isOnSlope || p->m_isDart) pl->checkCollisions(p, 0.0f, ignoreDamage); // moving platforms will launch u really high if this is anything other than 0.0, idk why
+	else pl->checkCollisions(p, stepDelta, ignoreDamage); // slopes will launch you really high if the 2nd argument is lower than like 0.01, idk why
+}
 
 class $modify(PlayerObject) {
 	// split a single step based on the entries in stepQueue
@@ -413,57 +417,103 @@ class $modify(PlayerObject) {
 
 		PlayerObject* p2 = pl->m_player2;
 		bool isDual = pl->m_gameState.m_isDualMode;
-		bool p1StartedOnGround = this->m_isOnGround;
-		bool p2StartedOnGround = p2->m_isOnGround;
 
-		bool p1NotBuffering = p1StartedOnGround
-			|| this->m_touchingRings->count()
-			|| this->m_isDashing
-			|| (this->m_isDart || this->m_isBird || this->m_isShip || this->m_isSwing);
-
-		bool p2NotBuffering = p2StartedOnGround
-			|| p2->m_touchingRings->count()
-			|| p2->m_isDashing
-			|| (p2->m_isDart || p2->m_isBird || p2->m_isShip || p2->m_isSwing);
+		/*
+		every player with an input on this step gets split, including airborne ones. previously airborne cube/ball/robot/spider
+		players were updated on step boundaries only, which made robot releases, orbs entered mid-step (e.g. copters),
+		and release-triggered stuff only have step precision.
+		buffering players are kept from landing mid-step though (see below), so buffer clicks behave like before.
+		*/
+		SplitPlayer players[2] = {
+			prepareSplit(this, true),
+			prepareSplit(p2, isDual)
+		};
 
 		p1Pos = PlayerObject::getPosition(); // save for later to prevent desync with move triggers & some other issues
 		p2Pos = p2->getPosition();
 
-		p1Split = p1NotBuffering;
-		p2Split = p2NotBuffering && isDual;
-		
+		p1Split = players[0].split;
+		p2Split = players[1].split;
+
+		auto updatePlayer = [&](PlayerObject* p, float dt) {
+			if (p == this) PlayerObject::update(dt);
+			else p->update(dt);
+		};
+
+		auto updatePlayerRotation = [&](PlayerObject* p, float dt) {
+			if (p == this) PlayerObject::updateRotation(dt);
+			else p->updateRotation(dt);
+		};
+
 		Step step;
 		bool firstLoop = true;
+		bool died = false;
 		midStep = true;
 
 		do {
-			step = popStepQueue();
+			CCPoint before[2] = { players[0].player->getPosition(), players[1].player->getPosition() };
+			bool inputApplied = false;
+			groupToggled = false;
+			step = popStepQueue(&inputApplied);
 			const float substepDelta = stepDelta * step.deltaFactor;
 			rotationDelta = substepDelta;
-			
-			if (p1Split) {
-				PlayerObject::update(substepDelta);
-				if (!step.endStep) {
-					if (firstLoop && ((this->m_yVelocity < 0) ^ this->m_isUpsideDown)) this->m_isOnGround = p1StartedOnGround; // this fixes delayed inputs on platforms moving down for some reason
-					if (!this->m_isOnSlope || this->m_isDart) pl->checkCollisions(this, 0.0f, true); // moving platforms will launch u really high if this is anything other than 0.0, idk why
-					else pl->checkCollisions(this, stepDelta, true); // slopes will launch you really high if the 2nd argument is lower than like 0.01, idk why
-					PlayerObject::updateRotation(substepDelta);
-					decomp_resetCollisionLog(this); // necessary for wave
-				}
-			}
-			else if (step.endStep) PlayerObject::update(stepDelta); // revert to click-on-steps mode when buffering to reduce bugs
 
-			if (p2Split) {
-				p2->update(substepDelta);
+			/*
+			let the input take effect at the exact time it happened, then check collisions again if it did something instant:
+			- spider/teleport orb teleports need a hazard check at the new position
+			- groups toggled by the input (toggle orbs, touch triggers) can enable portals/pads the player is already inside of
+			otherwise all of that would only be processed at the end of the step
+			*/
+			if (inputApplied && !died) {
+				for (int i = 0; i < 2; i++) {
+					SplitPlayer& sp = players[i];
+					PlayerObject* p = sp.player;
+					if (sp.split && (p->m_isSpider || p->m_touchingRings->count())) {
+						updatePlayer(p, stepDelta * SMALLEST_FLOAT);
+					}
+				}
+
+				for (int i = 0; i < 2; i++) {
+					SplitPlayer& sp = players[i];
+					PlayerObject* p = sp.player;
+					if (!sp.split) continue;
+
+					bool teleported = before[i].getDistance(p->getPosition()) > 1.0f;
+					if (!teleported && !groupToggled) continue;
+
+					substepCollision(pl, p, stepDelta, !teleported && !sp.checkHazards);
+					if (sp.buffering && !teleported) p->m_isOnGround = false;
+					decomp_resetCollisionLog(p);
+				}
+
+				if (pl->m_playerDied) died = true;
+			}
+
+			for (SplitPlayer& sp : players) {
+				PlayerObject* p = sp.player;
+
+				if (!sp.split) {
+					if (step.endStep && !died) updatePlayer(p, stepDelta); // revert to click-on-steps mode (only used for P2 outside of dual mode)
+					continue;
+				}
+
+				if (died) continue; // freeze the player where it died
+
+				updatePlayer(p, substepDelta);
 				if (!step.endStep) {
-					if (firstLoop && ((p2->m_yVelocity < 0) ^ p2->m_isUpsideDown)) p2->m_isOnGround = p2StartedOnGround;
-					if (!p2->m_isOnSlope || p2->m_isDart) pl->checkCollisions(p2, 0.0f, true);
-					else pl->checkCollisions(p2, stepDelta, true);
-					p2->updateRotation(substepDelta);
-					decomp_resetCollisionLog(p2);
+					if (firstLoop && ((p->m_yVelocity < 0) ^ p->m_isUpsideDown)) p->m_isOnGround = sp.startedOnGround; // this fixes delayed inputs on platforms moving down for some reason
+					substepCollision(pl, p, stepDelta, !sp.checkHazards);
+
+					// a click made after landing mid-step would jump instantly, but outside of CBF it's buffered until the next step,
+					// so dont let buffering players land until the end of the step (to match vanilla buffer clicks)
+					if (sp.buffering) p->m_isOnGround = false;
+
+					updatePlayerRotation(p, substepDelta);
+					decomp_resetCollisionLog(p); // necessary for wave
+
+					if (pl->m_playerDied) died = true;
 				}
 			}
-			else if (step.endStep) p2->update(stepDelta);
 
 			firstLoop = false;
 		} while (!step.endStep);
@@ -705,8 +755,6 @@ void toggleMod(bool disable) {
 }
 
 $on_mod(Loaded) {
-	Mod::get()->setSavedValue<bool>("is-linux", false);
-
 	toggleMod(Mod::get()->getSettingValue<bool>("soft-toggle"));
 	listenForSettingChanges<bool>("soft-toggle", toggleMod);
 
@@ -715,11 +763,6 @@ $on_mod(Loaded) {
 
 	togglePhysicsBypass(Mod::get()->getSettingValue<bool>("physics-bypass"));
 	listenForSettingChanges<bool>("physics-bypass", togglePhysicsBypass);
-
-	legacyBypass = Mod::get()->getSettingValue<std::string>("bypass-mode") == "2.1";
-	listenForSettingChanges<std::string>("bypass-mode", +[](std::string mode) {
-		legacyBypass = mode == "2.1";
-	});
 
 	safeMode = Mod::get()->getSettingValue<bool>("safe-mode");
 	listenForSettingChanges<bool>("safe-mode", +[](bool enable) {

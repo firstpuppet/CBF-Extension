@@ -1,3 +1,12 @@
+# v1.5.1
+
+* Robot release timings now register between frames (airborne players are no longer limited to step precision)
+* Orbs entered mid-step (ballcopters, cubecopters, etc.) now register between frames
+* Spider/spider orb inputs now check hazards (red hitboxes) at the time of the input
+* Groups toggled by an input (toggle orbs, touch triggers) can now be collided with at the time of the input
+* Physics Bypass now automatically uses 2.1 physics on pre-2.2 levels and 2.2 physics on 2.2 levels (removed the "Physics Bypass Mode" option)
+* Removed the Wine workaround and the Linux input program (no longer necessary)
+
 # v1.5.0
 
 * Port to GD 2.2081

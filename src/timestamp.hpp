@@ -10,12 +10,7 @@ using TimestampType = double;
 
 inline TimestampType getCurrentTimestamp() {
 	LARGE_INTEGER t;
-	if (linuxNative) {
-		// used instead of QPC to make it possible to convert between Linux and Windows timestamps
-		GetSystemTimePreciseAsFileTime((FILETIME*)&t);
-	} else {
-		QueryPerformanceCounter(&t);
-	}
+	QueryPerformanceCounter(&t);
 	return static_cast<TimestampType>(t.QuadPart) / static_cast<TimestampType>(freq.QuadPart);
 }
 

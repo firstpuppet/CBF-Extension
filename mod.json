@@ -6,7 +6,7 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.5.0",
+	"version": "v1.5.1",
 	"id": "syzzi.click_between_frames",
 	"name": "Click Between Frames",
 	"developer": "syzzi",
@@ -68,48 +68,13 @@
 		},
 		"physics-bypass": {
 			"name": "Enable Physics Bypass",
-			"description": "Reduces stuttering on some FPS values. Active even if \"Disable CBF\" is checked.\n\nTHIS WILL ALTER PHYSICS AND MAY BREAK SOME LEVELS! DON'T USE THIS IF YOUR LIST/LEADERBOARD BANS PHYSICS BYPASS!",
+			"description": "Reduces stuttering on some FPS values. Active even if \"Disable CBF\" is checked.\n\nThe physics mode is picked automatically per level: 2.2 levels use as few collision checks per frame as possible (with a minimum of 240 checks per second), while levels made before 2.2 use 2.1 physics (4 collision checks per frame at 60fps or above).\n\nTHIS WILL ALTER PHYSICS AND MAY BREAK SOME LEVELS! DON'T USE THIS IF YOUR LIST/LEADERBOARD BANS PHYSICS BYPASS!",
 			"type": "bool",
 			"default": false,
-			"platforms": ["win"]
-		},
-		"bypass-mode": {
-			"name": "Physics Bypass Mode",
-			"description": "2.2 mode means as few collision checks per frame as possible (with a minimum of 240 checks per second).\n\n2.1 mode means 4 collision checks per frame at 60fps or above",
-			"type": "string",
-			"one-of": ["2.2", "2.1"],
-			"default": "2.2",
-			"platforms": ["win"]
-		},
-		"linux-category": {
-			"name": "Linux",
-			"type": "title",
-			"platforms": ["win"]
-		},
-		"wine-workaround": {
-			"name": "Wine Workaround",
-			"description": "Wine doesn't let you get keyboard input between frames, so this is a workaround. However, it may not work properly on some PCs.\n\nOnly disable if experiencing issues (and don't play with keyboard if you disable it).",
-			"type": "bool",
-			"default": true,
-			"requires-restart": true,
-			"enable-if": "saved:you-must-be-on-linux-to-change-this",
-			"platforms": ["win"]
-		},
-		"right-click": {
-			"name": "Right Click P2",
-			"description": "Use right click for player 2 jump.",
-			"type": "bool",
-			"default": false,
-			"enable-if": "saved:you-must-be-on-linux-to-change-this && wine-workaround",
 			"platforms": ["win"]
 		}
 	},
 	"links": {
 		"source": "https://github.com/theyareonit/Click-Between-Frames"
-	},
-	"resources": {
-		"files": [
-			"resources/linux-input.so"
-		]
 	}
 }
