@@ -11,7 +11,11 @@ endif()
 
 add_library(${PROJECT_NAME} SHARED
     src/main.cpp
-    src/windows.cpp
+    src/input.cpp
+    src/game_layer.cpp
+    src/player.cpp
+    src/patches.cpp
+    src/results.cpp
 )
 
 if (NOT DEFINED ENV{GEODE_SDK})
