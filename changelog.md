@@ -11,6 +11,7 @@
 * Fixed inputs timestamped slightly before a frame making that physics step run longer than it should
 * A patch that fails to apply (precision fix, physics bypass, etc.) now disables that feature and logs an error instead of crashing
 * Reorganised the source code into smaller files and added unit tests for the timing code
+* Now requires Geode 5.11.1 (needed to build against current GD bindings)
 
 # v1.5.0
 

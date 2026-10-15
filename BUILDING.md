@@ -2,7 +2,7 @@
 
 This mod only supports **Windows**. GD has no native Linux version, so on Linux you cross-compile the Windows build and play through Wine/Proton.
 
-The mod targets **GD 2.2081** and needs **Geode 5.3.0 or newer** at runtime (see `mod.json`). Build it with the **latest** Geode SDK. Geode always pulls the newest GD bindings, which only match the current SDK, so an older SDK such as 5.3.0 fails to compile.
+The mod targets **GD 2.2081** and needs **Geode 5.11.1 or newer** (the `"geode"` field in `mod.json`). Build it with that SDK version or newer. Geode always pulls the newest GD bindings, which only match a recent SDK, so an older SDK such as 5.3.0 fails to compile. CI picks the SDK version from `mod.json`, so when bumping the SDK, bump that field too.
 
 This setup was tested on Ubuntu 24.04 with Clang 19, CMake 3.31 and Geode SDK 5.11.1, producing `ClickBetweenFrames.dll`.
 
